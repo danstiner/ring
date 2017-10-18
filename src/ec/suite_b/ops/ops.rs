@@ -88,6 +88,12 @@ static ONE: Elem<Unencoded> = Elem {
     encoding: PhantomData,
 };
 
+static ONE_SCALAR: Scalar<Unencoded> = Scalar {
+    limbs: limbs![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+    m: PhantomData,
+    encoding: PhantomData,
+};
+
 
 /// Operations and values needed by all curve operations.
 pub struct CommonOps {
@@ -301,6 +307,13 @@ impl ScalarOps {
             where (EA, EB): ProductEncoding {
         mul_mont(self.scalar_mul_mont, a, b)
     }
+
+
+    #[inline]
+    pub fn scalar_unencoded(&self, a: &Scalar<R>) -> Scalar<Unencoded> {
+        self.scalar_product(a, &ONE_SCALAR)
+    }
+
 }
 
 /// Operations on public scalars needed by ECDSA signature verification.
@@ -349,6 +362,30 @@ impl PublicScalarOps {
     }
 }
 
+/// Operations on private scalars needed by ECDSA signature generation.
+pub struct PrivateScalarOps {
+    pub scalar_ops: &'static ScalarOps,
+    pub private_key_ops: &'static PrivateKeyOps,
+}
+
+impl PrivateScalarOps {
+    #[inline]
+    pub fn mont_elem_as_mont_scalar(&self, a: &Elem<R>) -> Scalar<R> {
+        // TODO better name and actually do mod
+        Scalar {
+            limbs: a.limbs,
+            m: PhantomData,
+            encoding: PhantomData,
+        }
+    }
+
+    #[inline]
+    pub fn scalar_sum(&self, a: &Scalar, b: &Scalar)
+                    -> Scalar {
+        // TODO does this use the correct modulus? (Should be N)
+        binary_op(self.private_key_ops.common.elem_add_impl, a, b)
+    }
+}
 
 // Returns (`a` squared `squarings` times) * `b`.
 fn elem_sqr_mul(ops: &CommonOps, a: &Elem<R>, squarings: usize, b: &Elem<R>)
