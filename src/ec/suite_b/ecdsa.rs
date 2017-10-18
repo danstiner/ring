@@ -266,15 +266,14 @@ impl<'a> ECDSAKeyPair {
         //       4. assurance that he/she/it actually possesses the associated private key
         //          d (see [SP800-89] Section 6).
 
-        // Confirming prerequisites #1 and #2 are outside the scope of what
-        // this function can do.
+        // Confirming prerequisites #1, #2, and #3 are out of scope for this function.
         let d = private_key_as_scalar(private_key_ops, &self.key_pair.private_key);
 
         loop {
             // NSA Guide Step 1: Use one of the routines in Appendix A.2 to generate (k, k**−1), a per-
             // message secret number and its inverse modulo n. Since n is prime, the
             // output will be invalid only if there is a failure in the RBG.
-            let (k, k_inverse) = generate_secret_number(rng, &self.alg.id, scalar_ops)?;
+            let (k, k_inverse) = generate_secret_number(rng, scalar_ops)?;
 
             // NSA Guide Step 2: Compute the elliptic curve point R = kG = (xR,yR) using EC scalar
             // multiplication (see [Routines]), where G is the base point included in
@@ -398,27 +397,21 @@ fn digest_scalar_(ops: &ScalarOps, digest: &[u8]) -> Scalar {
 /// Generate an ECC Per-Message Secret Number as documented in the
 /// NSA Suite B Implementer's Section A.2.2
 /// Returns (k, k**−1) on success
-fn generate_secret_number(rng: &rand::SecureRandom, alg_id: &ECDSASigningAlgorithmID, scalar_ops: &'static ScalarOps) -> Result<(Scalar, Scalar<R>), error::Unspecified> {
+fn generate_secret_number(rng: &rand::SecureRandom, scalar_ops: &'static ScalarOps) -> Result<(Scalar, Scalar<R>), error::Unspecified> {
     // 1. Set N = len(n). Check that N is valid, that is, N = 256 or N = 384
     // (these are the only valid lengths for Suite B).
-    let n_bits = match *alg_id {
-        ECDSASigningAlgorithmID::ECDSA_P256_SHA256_FIXED_SIGNING => 256,
-        ECDSASigningAlgorithmID::ECDSA_P384_SHA384_FIXED_SIGNING => 384,
-        ECDSASigningAlgorithmID::ECDSA_P256_SHA256_ASN1_SIGNING => 256,
-        ECDSASigningAlgorithmID::ECDSA_P384_SHA384_ASN1_SIGNING => 384,
-    };
-    let n_bytes = n_bits / 8;
+    let n_bytes = scalar_ops.scalar_bytes_len();
 
     // 2. If N is invalid, then return ERROR; the pair (Invalid_k, Invalid_k_inverse)
     // should also be returned.
-    // TODO when could this happen
-
+    // This is left to the caller to choose a Scalar of appropriate size
     // 3. Set requested_security_strength to be the security strength associated
     // with N, which is 128 when using P-256 and 192 when using P-384.
     // This is left to the caller to choose an appropriate SecureRandom
 
-    let mut random_bytes_vec = vec![0u8; n_bytes];
-    let random_bytes = random_bytes_vec.get_mut(0..n_bytes).unwrap();
+    // Buffer to store random bytes
+    let mut buffer = vec![0u8; n_bytes];
+    let random_bytes = buffer.get_mut(0..n_bytes).unwrap();
 
     loop {
         // 4. Obtain a string of N returned bits from an RBG with a security
@@ -432,7 +425,7 @@ fn generate_secret_number(rng: &rand::SecureRandom, alg_id: &ECDSASigningAlgorit
 
         // 6. If (c > n − 2) then go to step 4.
         // 7. k = c + 1.
-        // Equivalently, go to step 4 if zero and do not add one
+        // Equivalently, instead go to step 4 if zero and do not add one
         if scalar_ops.common.is_zero(&c) {
             continue;
         }
