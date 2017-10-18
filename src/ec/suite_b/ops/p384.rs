@@ -75,7 +75,21 @@ pub static PRIVATE_KEY_OPS: PrivateKeyOps = PrivateKeyOps {
     elem_inv_squared: p384_elem_inv_squared,
     point_mul_base_impl: p384_point_mul_base_impl,
     point_mul_impl: GFp_nistz384_point_mul,
+    scalar_to_mont_impl: scalar_to_mont,
 };
+
+
+fn scalar_to_mont(a: &Scalar<Unencoded>) -> Scalar<R> {
+    static N_RR: Scalar<Unencoded> = Scalar {
+        limbs: p384_limbs![0x0c84ee01, 0x2b39bf21, 0x3fb05b7a, 0x28266895,
+                            0xd40d4917, 0x4aab1cc5, 0xbc3e483a, 0xfcb82947,
+                            0xff3d81e5, 0xdf1aa419, 0x2d319b24, 0x19b409a9],
+        m: PhantomData,
+        encoding: PhantomData
+    };
+    binary_op(GFp_p384_scalar_mul_mont, a, &N_RR)
+}
+
 
 fn p384_elem_inv_squared(a: &Elem<R>) -> Elem<R> {
     // Calculate a**-2 (mod q) == a**(q - 3) (mod q)
@@ -225,17 +239,6 @@ fn p384_scalar_inv_to_mont(a: &Scalar<Unencoded>) -> Scalar<R> {
         binary_op_assign(GFp_p384_scalar_mul_mont, acc, b)
     }
 
-    fn to_mont(a: &Scalar<Unencoded>) -> Scalar<R> {
-        static N_RR: Scalar<Unencoded> = Scalar {
-            limbs: p384_limbs![0x0c84ee01, 0x2b39bf21, 0x3fb05b7a, 0x28266895,
-                               0xd40d4917, 0x4aab1cc5, 0xbc3e483a, 0xfcb82947,
-                               0xff3d81e5, 0xdf1aa419, 0x2d319b24, 0x19b409a9],
-            m: PhantomData,
-            encoding: PhantomData
-        };
-        binary_op(GFp_p384_scalar_mul_mont, a, &N_RR)
-    }
-
     // Indexes into `d`.
     const B_1: usize = 0;
     const B_11: usize = 1;
@@ -248,7 +251,7 @@ fn p384_scalar_inv_to_mont(a: &Scalar<Unencoded>) -> Scalar<R> {
     const DIGIT_COUNT: usize = 8;
 
     let mut d = [Scalar::zero(); DIGIT_COUNT];
-    d[B_1]    = to_mont(a);
+    d[B_1]    = scalar_to_mont(a);
     let b_10  = sqr(&d[B_1]);
     for i in B_11..DIGIT_COUNT {
         d[i] = mul(&d[i - 1], &b_10);

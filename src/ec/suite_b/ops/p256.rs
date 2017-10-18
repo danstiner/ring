@@ -71,7 +71,18 @@ pub static PRIVATE_KEY_OPS: PrivateKeyOps = PrivateKeyOps {
     elem_inv_squared: p256_elem_inv_squared,
     point_mul_base_impl: p256_point_mul_base_impl,
     point_mul_impl: GFp_nistz256_point_mul,
+    scalar_to_mont_impl: scalar_to_mont,
 };
+
+fn scalar_to_mont(a: &Scalar) -> Scalar<R> {
+    static N_RR: Scalar<Unencoded> = Scalar {
+        limbs: p256_limbs![0x66e12d94, 0xf3d95620, 0x2845b239, 0x2b6bec59,
+                            0x4699799c, 0x49bd6fa6, 0x83244c95, 0xbe79eea2],
+        m: PhantomData,
+        encoding: PhantomData,
+    };
+    binary_op(GFp_p256_scalar_mul_mont, a, &N_RR)
+}
 
 fn p256_elem_inv_squared(a: &Elem<R>) -> Elem<R> {
     // Calculate a**-2 (mod q) == a**(q - 3) (mod q)
@@ -196,16 +207,6 @@ fn p256_scalar_inv_to_mont(a: &Scalar<Unencoded>) -> Scalar<R> {
         binary_op_assign(GFp_p256_scalar_mul_mont, acc, b);
     }
 
-    fn to_mont(a: &Scalar) -> Scalar<R> {
-        static N_RR: Scalar<Unencoded> = Scalar {
-            limbs: p256_limbs![0x66e12d94, 0xf3d95620, 0x2845b239, 0x2b6bec59,
-                               0x4699799c, 0x49bd6fa6, 0x83244c95, 0xbe79eea2],
-            m: PhantomData,
-            encoding: PhantomData,
-        };
-        binary_op(GFp_p256_scalar_mul_mont, a, &N_RR)
-    }
-
     // Indexes into `d`.
     const B_1: usize = 0;
     const B_10: usize = 1;
@@ -219,7 +220,7 @@ fn p256_scalar_inv_to_mont(a: &Scalar<Unencoded>) -> Scalar<R> {
 
     let mut d = [Scalar::zero(); DIGIT_COUNT];
 
-    d[B_1] = to_mont(a);
+    d[B_1] = scalar_to_mont(a);
     d[B_10] = sqr(&d[B_1]);
     d[B_11] = mul(&d[B_10], &d[B_1]);
     d[B_101] = mul(&d[B_10], &d[B_11]);

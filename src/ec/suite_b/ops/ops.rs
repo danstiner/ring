@@ -220,6 +220,7 @@ pub struct PrivateKeyOps {
                                      p_scalar: *const Limb/*[num_limbs]*/,
                                      p_x: *const Limb/*[num_limbs]*/,
                                      p_y: *const Limb/*[num_limbs]*/),
+    scalar_to_mont_impl: fn(a: &Scalar) -> Scalar<R>,
 }
 
 impl PrivateKeyOps {
@@ -242,6 +243,11 @@ impl PrivateKeyOps {
     #[inline]
     pub fn elem_inverse_squared(&self, a: &Elem<R>) -> Elem<R> {
         (self.elem_inv_squared)(a)
+    }
+
+    #[inline]
+    pub fn scalar_to_mont(&self, a: &Scalar) -> Scalar<R> {
+        (self.scalar_to_mont_impl)(a)
     }
 }
 
@@ -308,12 +314,10 @@ impl ScalarOps {
         mul_mont(self.scalar_mul_mont, a, b)
     }
 
-
     #[inline]
     pub fn scalar_unencoded(&self, a: &Scalar<R>) -> Scalar<Unencoded> {
         self.scalar_product(a, &ONE_SCALAR)
     }
-
 }
 
 /// Operations on public scalars needed by ECDSA signature verification.
@@ -371,12 +375,14 @@ pub struct PrivateScalarOps {
 impl PrivateScalarOps {
     #[inline]
     pub fn mont_elem_as_mont_scalar(&self, a: &Elem<R>) -> Scalar<R> {
+        let unencoded = self.private_key_ops.common.elem_unencoded(a);
         // TODO better name and actually do mod
-        Scalar {
-            limbs: a.limbs,
+        let c: Scalar = Scalar {
+            limbs: unencoded.limbs,
             m: PhantomData,
             encoding: PhantomData,
-        }
+        };
+        self.private_key_ops.scalar_to_mont(&c)
     }
 
     #[inline]
